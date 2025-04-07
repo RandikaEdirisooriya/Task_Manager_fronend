@@ -1,10 +1,11 @@
-import { Component, NgModule } from '@angular/core';
+import { Component, importProvidersFrom } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { RouterModule, Routes, Router } from '@angular/router';
 import { BrowserModule } from '@angular/platform-browser';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { importProvidersFrom } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClientModule } from '@angular/common/http'; // Import HttpClientModule
 
 // Models
 interface User {
@@ -30,9 +31,9 @@ interface Task {
     <nav class="navbar">
       <div class="nav-brand">Task Manager</div>
       <div class="nav-search">
-        <input 
-          type="text" 
-          class="search-input" 
+        <input
+          type="text"
+          class="search-input"
           placeholder="Search tasks..."
           [(ngModel)]="searchQuery"
           (input)="onSearch()"
@@ -45,7 +46,6 @@ interface Task {
       </div>
     </nav>
 
-    <!-- User Management Modal -->
     <div class="modal" *ngIf="showUserManagement">
       <div class="modal-content">
         <h2>User Management</h2>
@@ -62,7 +62,6 @@ interface Task {
       </div>
     </div>
 
-    <!-- Edit User Modal -->
     <div class="modal" *ngIf="selectedUser">
       <div class="modal-content">
         <h2>Edit User</h2>
@@ -139,18 +138,35 @@ class NavbarComponent {
     </div>
   `,
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule]
+  imports: [CommonModule, FormsModule, RouterModule, HttpClientModule] // Import HttpClientModule here as well
 })
 class LoginComponent {
   email = '';
   password = '';
+  errorMessage = '';
 
-  constructor(private router: Router) {}
+  constructor(private http: HttpClient, private router: Router) {}
 
   onLogin() {
-    if (this.email && this.password) {
-      this.router.navigate(['/tasks']);
-    }
+    const loginPayload = {
+      email: this.email,
+      password: this.password
+    };
+
+    this.http.post<any>('http://localhost:8080/api/v1/auth/signin', loginPayload).subscribe({
+      next: (response) => {
+        // Save token if backend returns one
+        if (response && response.token) {
+          localStorage.setItem('authToken', response.token);
+        }
+        console.log('Login successful', response);
+        // this.router.navigate(['/tasks']);
+      },
+      error: (error) => {
+        console.error('Login failed', error);
+        this.errorMessage = 'Invalid email or password';
+      }
+    });
   }
 }
 
@@ -205,9 +221,8 @@ class SignupComponent {
   template: `
     <app-navbar></app-navbar>
     <div class="container">
-  
-      
-      <!-- Add Task Form -->
+
+
       <div class="form-container">
         <h3>Add New Task</h3>
         <form (ngSubmit)="onAddTask()">
@@ -221,7 +236,6 @@ class SignupComponent {
         </form>
       </div>
 
-      <!-- Task List -->
       <div class="task-list">
         <div *ngFor="let task of tasks" class="task-card">
           <h3>{{task.title}}</h3>
@@ -240,7 +254,6 @@ class SignupComponent {
         </div>
       </div>
 
-      <!-- Edit Task Modal -->
       <div class="modal" *ngIf="selectedTask">
         <div class="modal-content">
           <h2>Edit Task</h2>
@@ -339,5 +352,6 @@ const routes: Routes = [
 bootstrapApplication(App, {
   providers: [
     importProvidersFrom(RouterModule.forRoot(routes)),
+    importProvidersFrom(HttpClientModule), // Provide HttpClientModule here
   ]
 }).catch(err => console.error(err));
