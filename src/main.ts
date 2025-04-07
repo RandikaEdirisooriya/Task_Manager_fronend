@@ -200,6 +200,121 @@ class SignupComponent {
   }
 }
 
+@Component({
+  selector: 'app-tasks',
+  template: `
+    <app-navbar></app-navbar>
+    <div class="container">
+  
+      
+      <!-- Add Task Form -->
+      <div class="form-container">
+        <h3>Add New Task</h3>
+        <form (ngSubmit)="onAddTask()">
+          <div class="form-group">
+            <input type="text" class="form-control" [(ngModel)]="newTask.title" name="title" placeholder="Title" required>
+          </div>
+          <div class="form-group">
+            <textarea class="form-control" [(ngModel)]="newTask.description" name="description" placeholder="Description" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Add Task</button>
+        </form>
+      </div>
+
+      <!-- Task List -->
+      <div class="task-list">
+        <div *ngFor="let task of tasks" class="task-card">
+          <h3>{{task.title}}</h3>
+          <p>{{task.description}}</p>
+          <div class="task-meta">
+            <span class="status-badge" [ngClass]="{'status-pending': task.status === 'PENDING', 'status-completed': task.status === 'COMPLETED'}">
+              {{task.status}}
+            </span>
+            <span>Created: {{task.createdAt | date}}</span>
+          </div>
+          <div class="task-actions">
+            <button class="btn btn-primary" (click)="editTask(task)">Edit</button>
+            <button class="btn btn-primary" (click)="toggleStatus(task)">Toggle Status</button>
+            <button class="btn btn-primary" (click)="deleteTask(task)">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Task Modal -->
+      <div class="modal" *ngIf="selectedTask">
+        <div class="modal-content">
+          <h2>Edit Task</h2>
+          <form (ngSubmit)="updateTask()">
+            <div class="form-group">
+              <input type="text" class="form-control" [(ngModel)]="selectedTask.title" name="title" placeholder="Title" required>
+            </div>
+            <div class="form-group">
+              <textarea class="form-control" [(ngModel)]="selectedTask.description" name="description" placeholder="Description" required></textarea>
+            </div>
+            <div class="form-group">
+              <select class="form-control" [(ngModel)]="selectedTask.status" name="status">
+                <option value="PENDING">Pending</option>
+                <option value="COMPLETED">Completed</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary">Save</button>
+              <button type="button" class="btn btn-primary" (click)="selectedTask = null">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `,
+  standalone: true,
+  imports: [CommonModule, FormsModule, NavbarComponent]
+})
+class TasksComponent {
+  tasks: Task[] = [];
+  newTask: Partial<Task> = {
+    title: '',
+    description: '',
+    status: 'PENDING',
+  };
+  selectedTask: Task | null = null;
+
+  onAddTask() {
+    if (this.newTask.title && this.newTask.description) {
+      const task: Task = {
+        ...this.newTask as Task,
+        createdAt: new Date(),
+      };
+      this.tasks.push(task);
+      this.newTask = {
+        title: '',
+        description: '',
+        status: 'PENDING',
+      };
+    }
+  }
+
+  editTask(task: Task) {
+    this.selectedTask = { ...task };
+  }
+
+  updateTask() {
+    if (this.selectedTask) {
+      const index = this.tasks.findIndex(t => t === this.selectedTask);
+      if (index !== -1) {
+        this.tasks[index] = { ...this.selectedTask };
+      }
+      this.selectedTask = null;
+    }
+  }
+
+  toggleStatus(task: Task) {
+    task.status = task.status === 'PENDING' ? 'COMPLETED' : 'PENDING';
+  }
+
+  deleteTask(task: Task) {
+    this.tasks = this.tasks.filter(t => t !== task);
+  }
+}
 
 @Component({
   selector: 'app-root',
@@ -218,7 +333,7 @@ const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   { path: 'login', component: LoginComponent },
   { path: 'signup', component: SignupComponent },
-
+  { path: 'tasks', component: TasksComponent },
 ];
 
 bootstrapApplication(App, {
