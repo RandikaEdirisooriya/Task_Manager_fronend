@@ -199,20 +199,36 @@ class LoginComponent {
     </div>
   `,
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule]
+  imports: [CommonModule, FormsModule, RouterModule, HttpClientModule]
 })
 class SignupComponent {
   name = '';
   email = '';
   password = '';
   role: 'USER' | 'ADMIN' = 'USER';
+  errorMessage = '';
 
-  constructor(private router: Router) {}
+  constructor(private http: HttpClient, private router: Router) {}
 
   onSignup() {
-    if (this.name && this.email && this.password) {
-      this.router.navigate(['/tasks']);
-    }
+    const signupPayload = {
+      email: this.email,
+      name: this.name,
+      password: this.password,
+      role: this.role
+    };
+
+    this.http.post<any>('http://localhost:8080/api/v1/auth/signup', signupPayload).subscribe({ // Corrected URL
+      next: (response) => {
+        console.log('Signup successful', response);
+        this.router.navigate(['/tasks']); // Redirect after successful signup
+      },
+      error: (error) => {
+        console.error('Signup failed', error);
+        this.errorMessage = 'Signup failed. Please try again.';
+        // Optionally display the error message to the user
+      }
+    });
   }
 }
 
