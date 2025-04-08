@@ -5,7 +5,9 @@ import { BrowserModule } from '@angular/platform-browser';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { HttpClientModule } from '@angular/common/http'; // Import HttpClientModule
+import { HttpClientModule } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { catchError, throwError } from 'rxjs';
 
 // Models
 interface User {
@@ -21,7 +23,38 @@ interface Task {
   title: string;
   description: string;
   status: 'PENDING' | 'COMPLETED';
-  createdAt: Date;
+  createdAt: Date | string;
+}
+
+// Service to manage authentication-related state
+@Injectable({
+  providedIn: 'root'
+})
+class AuthService {
+  private authTokenKey = 'authToken';
+
+  constructor(private router: Router) { }
+
+  getToken(): string | null {
+    return localStorage.getItem(this.authTokenKey);
+  }
+
+  setToken(token: string): void {
+    localStorage.setItem(this.authTokenKey, token);
+  }
+
+  clearToken(): void {
+    localStorage.removeItem(this.authTokenKey);
+  }
+
+  isAuthenticated(): boolean {
+    return !!this.getToken();
+  }
+
+  logout(): void {
+    this.clearToken();
+    this.router.navigate(['/login']);
+  }
 }
 
 // Components
@@ -40,9 +73,12 @@ interface Task {
         >
       </div>
       <div class="nav-actions">
-        <button class="btn-icon" (click)="showUserManagement = true">
-         <i class="fas fa-user"></i>
+        <button class="btn-icon" (click)="showUserManagement = true" *ngIf="authService.isAuthenticated()">
+          <i class="fas fa-user"></i>
         </button>
+        <button class="btn btn-primary" (click)="authService.logout()" *ngIf="authService.isAuthenticated()">Logout</button>
+        <a class="btn btn-primary" routerLink="/login" *ngIf="!authService.isAuthenticated()">Login</a>
+        <a class="btn btn-primary" routerLink="/signup" *ngIf="!authService.isAuthenticated()">Sign Up</a>
       </div>
     </nav>
 
@@ -52,8 +88,8 @@ interface Task {
         <div class="user-list">
           <div *ngFor="let user of users" class="user-item">
             <div>
-              <strong>{{user.name}}</strong>
-              <p>{{user.email}} - {{user.role}}</p>
+              <strong>{{ user.name }}</strong>
+              <p>{{ user.email }} - {{ user.role }}</p>
             </div>
             <button class="btn btn-primary" (click)="editUser(user)">Edit</button>
           </div>
@@ -87,7 +123,7 @@ interface Task {
     </div>
   `,
   standalone: true,
-  imports: [CommonModule, FormsModule]
+  imports: [CommonModule, FormsModule, RouterModule]
 })
 class NavbarComponent {
   searchQuery = '';
@@ -98,9 +134,11 @@ class NavbarComponent {
     { id: 2, name: 'Admin User', email: 'admin@example.com', password: '', role: 'ADMIN' }
   ];
 
+  constructor(public authService: AuthService) { }
+
   onSearch() {
-    // Implement search logic
     console.log('Searching:', this.searchQuery);
+    this.searchQuery = this.searchQuery;
   }
 
   editUser(user: User) {
@@ -138,14 +176,14 @@ class NavbarComponent {
     </div>
   `,
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HttpClientModule] // Import HttpClientModule here as well
+  imports: [CommonModule, FormsModule, RouterModule, HttpClientModule]
 })
 class LoginComponent {
   email = '';
   password = '';
   errorMessage = '';
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(private http: HttpClient, private router: Router, private authService: AuthService) { }
 
   onLogin() {
     const loginPayload = {
@@ -155,12 +193,11 @@ class LoginComponent {
 
     this.http.post<any>('http://localhost:8080/api/v1/auth/signin', loginPayload).subscribe({
       next: (response) => {
-        // Save token if backend returns one
         if (response && response.token) {
-          localStorage.setItem('authToken', response.token);
+          this.authService.setToken(response.token);
         }
         console.log('Login successful', response);
-        // this.router.navigate(['/tasks']);
+        this.router.navigate(['/tasks']);
       },
       error: (error) => {
         console.error('Login failed', error);
@@ -208,7 +245,7 @@ class SignupComponent {
   role: 'USER' | 'ADMIN' = 'USER';
   errorMessage = '';
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(private http: HttpClient, private router: Router, private authService: AuthService) { }
 
   onSignup() {
     const signupPayload = {
@@ -218,15 +255,14 @@ class SignupComponent {
       role: this.role
     };
 
-    this.http.post<any>('http://localhost:8080/api/v1/auth/signup', signupPayload).subscribe({ // Corrected URL
+    this.http.post<any>('http://localhost:8080/api/v1/auth/signup', signupPayload).subscribe({
       next: (response) => {
         console.log('Signup successful', response);
-        this.router.navigate(['/tasks']); // Redirect after successful signup
+        this.router.navigate(['/login']);
       },
       error: (error) => {
         console.error('Signup failed', error);
         this.errorMessage = 'Signup failed. Please try again.';
-        // Optionally display the error message to the user
       }
     });
   }
@@ -253,8 +289,9 @@ class SignupComponent {
       </div>
 
       <div class="task-list">
-        <div *ngFor="let task of tasks" class="task-card">
-          <h3>{{task.title}}</h3>
+        <div *ngFor="let task of filteredTasks; let i = index" class="task-card" [attr.data-task-id]="task.id">
+          
+          <h3>ID:{{task.id}} <br><br> Title: {{task.title}}</h3>
           <p>{{task.description}}</p>
           <div class="task-meta">
             <span class="status-badge" [ngClass]="{'status-pending': task.status === 'PENDING', 'status-completed': task.status === 'COMPLETED'}">
@@ -264,8 +301,8 @@ class SignupComponent {
           </div>
           <div class="task-actions">
             <button class="btn btn-primary" (click)="editTask(task)">Edit</button>
-            <button class="btn btn-primary" (click)="toggleStatus(task)">Toggle Status</button>
-            <button class="btn btn-primary" (click)="deleteTask(task)">Delete</button>
+            <button class="btn btn-primary" (click)="toggleStatus(task.id!, i)">Toggle Status</button>
+            <button class="btn btn-primary" (click)="deleteTask(i)">Delete</button>
           </div>
         </div>
       </div>
@@ -296,7 +333,7 @@ class SignupComponent {
     </div>
   `,
   standalone: true,
-  imports: [CommonModule, FormsModule, NavbarComponent]
+  imports: [CommonModule, FormsModule, NavbarComponent, HttpClientModule]
 })
 class TasksComponent {
   tasks: Task[] = [];
@@ -306,19 +343,105 @@ class TasksComponent {
     status: 'PENDING',
   };
   selectedTask: Task | null = null;
+  searchQuery: string = '';
+
+  constructor(private http: HttpClient, private router: Router, private authService: AuthService) {
+    if (!authService.isAuthenticated()) {
+      this.router.navigate(['/login']);
+    } else {
+      this.loadTasks();
+    }
+  }
+
+  get filteredTasks(): Task[] {
+    if (this.searchQuery) {
+      const searchId = parseInt(this.searchQuery, 10);
+      if (!isNaN(searchId)) {
+        return this.tasks.filter(task => task.id === searchId);
+      }
+      return this.tasks.filter(task =>
+        task.title.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+        task.description.toLowerCase().includes(this.searchQuery.toLowerCase())
+      );
+    }
+    return this.tasks;
+  }
+
+  loadTasks() {
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({
+        'Authorization': `Bearer ${token}`
+      });
+      this.http.get<Task[]>('http://localhost:8080/api/v1/task/all', { headers })
+        .pipe(
+          catchError((error) => {
+            console.error('Error loading tasks:', error);
+            if (error.status === 401) {
+              this.authService.clearToken();
+              this.router.navigate(['/login']);
+              return throwError(() => error);
+            }
+            return throwError(() => error);
+          })
+        )
+        .subscribe({
+          next: (response) => {
+            this.tasks = response;
+          },
+          error: (error) => {
+           
+          }
+        });
+    } else {
+      console.warn('No auth token found, redirecting to login.');
+      this.router.navigate(['/login']);
+    }
+  }
 
   onAddTask() {
     if (this.newTask.title && this.newTask.description) {
-      const task: Task = {
-        ...this.newTask as Task,
-        createdAt: new Date(),
-      };
-      this.tasks.push(task);
-      this.newTask = {
-        title: '',
-        description: '',
-        status: 'PENDING',
-      };
+      const token = this.authService.getToken();
+      if (token) {
+        const headers = new HttpHeaders({
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        });
+        const now = new Date();
+        const taskData = {
+          title: this.newTask.title,
+          description: this.newTask.description,
+          status: this.newTask.status || 'PENDING',
+          createdAt: now.toISOString()
+        };
+
+        this.http.post<Task>('http://localhost:8080/api/v1/task/save', taskData, { headers })
+          .pipe(
+            catchError((error) => {
+              console.error('Error adding task:', error);
+              if (error.status === 401) {
+                this.authService.clearToken();
+                this.router.navigate(['/login']);
+                return throwError(() => error);
+              }
+              return throwError(() => error);
+            })
+          )
+          .subscribe({
+            next: (response) => {
+              console.log('Task added successfully', response);
+              this.tasks = [response, ...this.tasks];
+              this.newTask = { title: '', description: '', status: 'PENDING' };
+              this.loadTasks();
+            },
+            error: (error) => {
+             
+            }
+          });
+      } else {
+        console.warn('No auth token found, cannot add task.');
+        this.router.navigate(['/login']);
+      }
     }
   }
 
@@ -328,20 +451,126 @@ class TasksComponent {
 
   updateTask() {
     if (this.selectedTask) {
-      const index = this.tasks.findIndex(t => t === this.selectedTask);
-      if (index !== -1) {
-        this.tasks[index] = { ...this.selectedTask };
+      const token = this.authService.getToken();
+      if (token) {
+        const headers = new HttpHeaders({
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        });
+        this.http.put<Task>(`http://localhost:8080/api/v1/task/update/${this.selectedTask.id}`, this.selectedTask, { headers })
+          .pipe(
+            catchError((error) => {
+              console.error('Error updating task:', error);
+              if (error.status === 401) {
+                this.authService.clearToken();
+                this.router.navigate(['/login']);
+                return throwError(() => error);
+              }
+              return throwError(() => error);
+            })
+          )
+          .subscribe({
+            next: (response) => {
+              console.log('Task updated successfully', response);
+              const index = this.tasks.findIndex(t => t.id === response.id);
+              if (index !== -1) {
+                this.tasks[index] = response;
+              }
+              this.selectedTask = null;
+              this.loadTasks();
+            },
+            error: (error) => {
+             
+            }
+          });
+      } else {
+        console.warn('No auth token found, cannot update task.');
+        this.router.navigate(['/login']);
       }
-      this.selectedTask = null;
     }
   }
 
-  toggleStatus(task: Task) {
-    task.status = task.status === 'PENDING' ? 'COMPLETED' : 'PENDING';
+  toggleStatus(taskId: number, index: number) {
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      });
+
+      const task = this.tasks.find(t => t.id === taskId);
+      if (!task) {
+        console.error('Task not found with id:', taskId);
+        return;
+      }
+      const updatedStatus = task.status === 'PENDING' ? 'COMPLETED' : 'PENDING';
+      const updatedTask = { ...task, status: updatedStatus };
+
+      this.http.put<Task>(`http://localhost:8080/api/v1/task/update/${taskId}`, updatedTask, { headers })
+        .pipe(
+          catchError((error) => {
+            console.error('Error toggling task status:', error);
+            if (error.status === 401) {
+              this.authService.clearToken();
+              this.router.navigate(['/login']);
+              return throwError(() => error);
+            }
+            return throwError(() => error);
+          })
+        )
+        .subscribe({
+          next: (response) => {
+            console.log('Task status updated successfully', response);
+            this.tasks[index] = response;
+            this.loadTasks();
+          },
+          error: (error) => {
+           
+          }
+        });
+    } else {
+      console.warn('No auth token found, cannot update task status.');
+      this.router.navigate(['/login']);
+    }
   }
 
-  deleteTask(task: Task) {
-    this.tasks = this.tasks.filter(t => t !== task);
+  deleteTask(index: number) {
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({
+        'Authorization': `Bearer ${token}`
+      });
+      const taskToDelete = this.tasks[index];
+      if (!taskToDelete) {
+        console.error('Task to delete not found at index:', index);
+        return;
+      }
+      this.http.delete(`http://localhost:8080/api/v1/task/delete/${taskToDelete.id}`, { headers })
+        .pipe(
+          catchError((error) => {
+            console.error('Error deleting task:', error);
+            if (error.status === 401) {
+              this.authService.clearToken();
+              this.router.navigate(['/login']);
+              return throwError(() => error);
+            }
+            return throwError(() => error);
+          })
+        )
+        .subscribe({
+          next: (response) => {
+            console.log('Task deleted successfully', response);
+            this.tasks.splice(index, 1);
+            this.loadTasks();
+          },
+          error: (error) => {
+           
+          }
+        });
+    } else {
+      console.warn('No auth token found, cannot delete task.');
+      this.router.navigate(['/login']);
+    }
   }
 }
 
@@ -368,6 +597,8 @@ const routes: Routes = [
 bootstrapApplication(App, {
   providers: [
     importProvidersFrom(RouterModule.forRoot(routes)),
-    importProvidersFrom(HttpClientModule), // Provide HttpClientModule here
+    importProvidersFrom(HttpClientModule),
+    AuthService
   ]
 }).catch(err => console.error(err));
+
